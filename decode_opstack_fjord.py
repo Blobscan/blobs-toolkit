@@ -1,8 +1,30 @@
 #!/usr/bin/env python
-# https://specs.optimism.io/protocol/derivation.html
+#
+# Usage:
+# poetry run ./decode_opstack_fjord.py 0x43a9bc92f7d0badf392a9f908ffe7a94119c991b0cb22869b772a8822d9464b9.blob
+#
+# This version uses brotli channel compression instead of legacy
+# https://specs.optimism.io/protocol/derivation.html#channel-format
+# https://specs.optimism.io/protocol/fjord/derivation.html#brotli-channel-compression
+#
+# Working txs:
+#
+# Failing txs:
+# 0x43a9bc92f7d0badf392a9f908ffe7a94119c991b0cb22869b772a8822d9464b9 (contract_creation_txs_number assertion)
+# 0x23851c46ce16d04f5d2b90bf9a66e460a1e0422671e4de548f4707f945a6c1ea
+# 0xbf9f039ce6ea38296c32c6cdf2c4948d87aef46106c4d2287a87799cb62e2575 (read_bitlist: IndexError: index out of range)
+# 0xc410c7c8babe6d8b39fabd79df3ce1c2c5f68479e352b222f61842023300c405 (contract_creation_txs_number assertion)
+# 0x51c6b8f572f7c33b3be7b9b0332c071f0828c606206c5bbb2dc6a88ae89fefed (ValueError: Number 11369 was not minimally encoded (as a 3 bytes varint).)
+#0x2f26c5e835041b036a5a2ff9c703f0dcc63829761f54fa5f9cbcdc75007b3bd0 (ValueError: Varints must be at most 9 bytes long.)
+
 import rlp, zlib, io
 from multiformats import varint
 import sys
+import brotli
+
+
+# https://specs.optimism.io/protocol/derivation.html#channel-format
+MAX_RLP_BYTES_PER_CHANNEL = 100_000_000
 
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
@@ -29,8 +51,8 @@ def read_bitlist(l, b):
         l -= 8
     return r
 
-# blobs from this tx: https://etherscan.io/tx/0x353c6f31903147f8d490c28e556caafd7a9fad8b3bc4fd210ae800ee24749adb
 if len(sys.argv) == 1:
+    # blobs from this tx: https://etherscan.io/tx/0x353c6f31903147f8d490c28e556caafd7a9fad8b3bc4fd210ae800ee24749adb
     filename = "opstack_blobs_19538908.bin"
 else:
     filename = sys.argv[1]
@@ -94,12 +116,39 @@ for data in datas:
         channel += frame_data
         data = data[end:]
 
-decomp = zlib.decompressobj() # zlib.decompress() doesn't work for some reason
-result = rlp.decode(decomp.decompress(channel))
 
+is_fjord = False
+
+# TODO: Analyze first byte. Determine if a channel encoding is legacy or versioned format by testing for these bit values.
+# https://specs.optimism.io/protocol/fjord/derivation.html#brotli-channel-compression
+#
+try:
+    decomp = zlib.decompressobj()
+    result = decomp.decompress(channel)
+    print("ZLIB")
+except zlib.error:  # Fjord network upgrade uses brotli
+    print("\n==========")
+    print("channel:", channel[:10])
+    print("len channel:", len(channel))
+    print("data:", data[:10])
+    #   result = rlp.decode(decomp.decompress(channel))
+    #                       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    # zlib.error: Error -3 while decompressing data: incorrect header check
+    is_fjord = True
+    # Tx 0x23851c46ce16d04f5d2b90bf9a66e460a1e0422671e4de548f4707f945a6c1ea
+    # result = brotli.decompress(channel[1:MAX_RLP_BYTES_PER_CHANNEL])
+    result = brotli.decompress(channel[1:])
+    print("BROTLI")
+
+# FIXME: rlp.exceptions.DecodingError: RLP string ends with 1855147 superfluous bytes
+result = rlp.decode(result)
 print("result of %d bytes: %s...\n" % (len(result), result.hex()[:100]))
 batch = io.BytesIO(result)
-assert batch.read(1) == b"\x01", "decoded value is not a span batch"
+
+if is_fjord:
+    assert channel[0] == 1
+else:
+    assert batch.read(1) == b"\x01", "decoded value is not a span batch"
 
 print("timestamp since L2 genesis:", read_varint(batch))
 print("last L1 origin number:", (read_varint(batch)))
@@ -107,6 +156,7 @@ print("parent L2 block hash:", batch.read(20).hex())
 print("L1 origin block hash:", batch.read(20).hex())
 l2_blocks_number = read_varint(batch)
 print("number of L2 blocks:", l2_blocks_number)
+
 print("how many were changed by L1 origin:", sum(read_bitlist(l2_blocks_number, batch)))
 total_txs = sum([read_varint(batch) for _ in range(l2_blocks_number)])
 print("total txs:", total_txs)
@@ -115,8 +165,10 @@ print("contract creation txs number:", contract_creation_txs_number)
 y_parity_bits = read_bitlist(total_txs, batch)
 tx_sigs = [batch.read(64) for _ in range(total_txs)]
 tx_tos = [batch.read(20) for _ in range(total_txs)]
-# FIXME: Assertion fails with tx 0xa679e7d0f7f8646638863a4e5e5f8305b9cf897ad26873b8245dc3150192a6eb
-assert sum([int.from_bytes(to) == 0 for to in tx_tos]) == contract_creation_txs_number
+sum_1 = sum([int.from_bytes(to) == 0 for to in tx_tos])
+if sum_1 != contract_creation_txs_number:
+    print(f"Numbers don't match: {sum_1} vs {contract_creation_txs_number}")
+    assert sum([int.from_bytes(to) == 0 for to in tx_tos]) == contract_creation_txs_number
 # fuck python's pass by reference!!!
 b = batch.read()
 p = 0
@@ -135,3 +187,4 @@ print("legacy txs number:", legacy_txs_number)
 tx_nonces = [read_varint(batch) for _ in range(total_txs)]
 print("total gas limit in txs:", sum([read_varint(batch) for _ in range(total_txs)]))
 print("number of EIP-155 protected legacy txs:", sum(read_bitlist(legacy_txs_number, batch)))
+#print(f"TX datas: {tx_datas}")

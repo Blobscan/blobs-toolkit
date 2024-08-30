@@ -1,0 +1,20 @@
+{
+  "name": "blobs-toolkit",
+  "version": "1.0.0",
+  "description": "Small scripts related to blobs &amp; rollups using them",
+  "main": "decode_blob.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^22.5.1",
+    "ethereumjs-util": "^7.1.5",
+    "pako": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/pako": "^2.0.3"
+  }
+}

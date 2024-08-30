@@ -89,11 +89,16 @@ for data in datas:
         frame_length = int.from_bytes(data[16+2:16+2+4])
         print("frame data length:", frame_length)
         end = 16+2+4+frame_length+1
+        print("end:", end)
         print("is_last:", data[end-1:end])
         frame_data = data[16+2+4:end-1]
+        print([int(d) for d in frame_data[:100]])
+        print("frame_data100:", frame_data[:100])
         channel += frame_data
         data = data[end:]
 
+for i in range(100):
+    print(channel[i])
 decomp = zlib.decompressobj() # zlib.decompress() doesn't work for some reason
 result = rlp.decode(decomp.decompress(channel))
 

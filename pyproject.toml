@@ -10,6 +10,7 @@ readme = "README.md"
 python = "^3.11"
 multiformats = "^0.3.1.post4"
 rlp = "^4.0.1"
+requests = "^2.32.3"
 
 
 [build-system]

@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # https://specs.optimism.io/protocol/derivation.html
 import rlp, zlib, io
 from multiformats import varint

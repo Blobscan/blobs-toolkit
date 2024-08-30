@@ -1,6 +1,7 @@
 # https://specs.optimism.io/protocol/derivation.html
 import rlp, zlib, io
 from multiformats import varint
+import sys
 
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
@@ -28,7 +29,12 @@ def read_bitlist(l, b):
     return r
 
 # blobs from this tx: https://etherscan.io/tx/0x353c6f31903147f8d490c28e556caafd7a9fad8b3bc4fd210ae800ee24749adb
-blobs = open("opstack_blobs_19538908.bin", "rb").read()
+if len(sys.argv) == 1:
+    filename = "opstack_blobs_19538908.bin"
+else:
+    filename = sys.argv[1]
+
+blobs = open(filename, "rb").read()
 
 datas = []
 for blob in chunks(blobs, 131072):
@@ -48,11 +54,11 @@ for blob in chunks(blobs, 131072):
         tailB = chunk[32*1+1:32*2]
         tailC = chunk[32*2+1:32*3]
         tailD = chunk[32*3+1:32*4]
-        
+
         x = (byteA & 0b0011_1111) | ((byteB & 0b0011_0000) << 2)
         y = (byteB & 0b0000_1111) | ((byteD & 0b0000_1111) << 4)
         z = (byteC & 0b0011_1111) | ((byteD & 0b0011_0000) << 2)
-        
+
         result = b""
         result += tailA
         result += x.to_bytes(1)
@@ -61,12 +67,12 @@ for blob in chunks(blobs, 131072):
         result += tailC
         result += z.to_bytes(1)
         result += tailD
-        
+
         assert len(result) == 4*31 + 3
 
         blob_data += result
 
-    
+
     datas.append(blob_data[4:declared_length+4])
 
 channel = b""

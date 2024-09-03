@@ -134,6 +134,7 @@ except zlib.error:  # Fjord network upgrade uses brotli
     #   result = rlp.decode(decomp.decompress(channel))
     #                       ^^^^^^^^^^^^^^^^^^^^^^^^^^
     # zlib.error: Error -3 while decompressing data: incorrect header check
+    assert channel[0] == 1
     is_fjord = True
     # Tx 0x23851c46ce16d04f5d2b90bf9a66e460a1e0422671e4de548f4707f945a6c1ea
     # result = brotli.decompress(channel[1:MAX_RLP_BYTES_PER_CHANNEL])
@@ -145,9 +146,7 @@ result = rlp.decode(result)
 print("result of %d bytes: %s...\n" % (len(result), result.hex()[:100]))
 batch = io.BytesIO(result)
 
-if is_fjord:
-    assert channel[0] == 1
-else:
+if not is_fjord:
     assert batch.read(1) == b"\x01", "decoded value is not a span batch"
 
 print("timestamp since L2 genesis:", read_varint(batch))

@@ -76,6 +76,9 @@ for blob in chunks(blobs, 131072):
 
     datas.append(blob_data[4:declared_length+4])
 
+# Frame format: channel_id ++ frame_number ++ frame_data_length ++ frame_data ++ is_last
+# https://specs.optimism.io/protocol/derivation.html#frame-format
+# See https://github.com/blocktorch-xyz/optimism-batch-decoder/blob/main/src/frames/frame.ts
 channel = b""
 for data in datas:
     assert data[0] == 0 # derivation version
@@ -92,13 +95,17 @@ for data in datas:
         print("end:", end)
         print("is_last:", data[end-1:end])
         frame_data = data[16+2+4:end-1]
-        print([int(d) for d in frame_data[:100]])
-        print("frame_data100:", frame_data[:100])
+        # print([hex(d) for d in frame_data[:100]])
+        # print("frame_data100:", frame_data[:100])
         channel += frame_data
         data = data[end:]
 
-for i in range(100):
-    print(channel[i])
+# print("full channel:", len(channel), "bytes")
+# print([hex(d) for d in channel[:100]])
+# print([hex(d) for d in channel[-50:]])
+
+# for i in range(100):
+#     print(channel[i])
 decomp = zlib.decompressobj() # zlib.decompress() doesn't work for some reason
 result = rlp.decode(decomp.decompress(channel))
 
@@ -140,3 +147,7 @@ print("legacy txs number:", legacy_txs_number)
 tx_nonces = [read_varint(batch) for _ in range(total_txs)]
 print("total gas limit in txs:", sum([read_varint(batch) for _ in range(total_txs)]))
 print("number of EIP-155 protected legacy txs:", sum(read_bitlist(legacy_txs_number, batch)))
+
+
+# Analize tx_datas
+# See https://github.com/xdaichain/optimism-txs-batch-decoder/blob/master/src/batch.rs
